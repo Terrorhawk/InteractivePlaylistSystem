@@ -4,7 +4,11 @@ Interactive Playlist System (IPS) is een zelf te hosten jukebox voor evenementen
 
 De server beheert sites, events, accounts, stemmen en de afspeelvolgorde. Een gekoppelde IPS-player speelt de audio af en bevestigt welke nummers daadwerkelijk spelen. Als geen aanvraag speelbaar is, gebruikt IPS de fallbackplaylists. De server gebruikt Flask en MariaDB en draait via Docker.
 
-**Alpha 0.2.9.** Voor de volledige afspeeltest heb je een compatibele IPS-player nodig. Je kunt het beheer en de bezoekerspagina alvast zonder player testen.
+**Alpha 0.2.10.** Voor de volledige afspeeltest heb je een compatibele IPS-player nodig. Je kunt het beheer en de bezoekerspagina alvast zonder player testen.
+
+## Taal en updates
+
+Stel in Docker `IPS_LANGUAGE=nl` in voor Nederlands of `IPS_LANGUAGE=en` voor Engels. Nederlands is de standaard. De footer toont de geïnstalleerde versie en geeft een melding bij een nieuwere gepubliceerde GitHub-release, inclusief prereleases. De server bewaart het resultaat een uur.
 
 ## Snel starten
 
@@ -34,7 +38,7 @@ De stappen hieronder beschrijven ook installatie met een bestaande MariaDB, Port
 
    ```sh
    cd /volume1/docker/ips-multisite-alpha
-   docker build -t ips-multisite:0.2.9-alpha2 .
+   docker build -t ips-multisite:0.2.10-alpha2 .
    ```
 
 4. Bewerk dezelfde alpha-stack in Portainer. Vervang de inhoud door `portainer-external-db.yaml`. Behoud je bestaande environmentwaarden, waaronder secret key en databasehost/-naam/-gebruiker/-wachtwoord. De nieuwe image staat lokaal; laat geforceerd downloaden uit een registry uit.

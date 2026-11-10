@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="nl">
+<html lang="{{ ips_language }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,6 +12,7 @@
   .screen { min-height: 100vh; padding: clamp(16px, 3vw, 64px); display: grid;
     grid-template-columns: minmax(0, .9fr) minmax(0, 1.15fr); grid-template-rows: auto 1fr;
     gap: clamp(16px, 2.6vw, 48px); }
+  .ips-footer { grid-column: 1/-1; }
   header { grid-column: 1/-1; display: flex; justify-content: space-between; gap: 1rem;
     padding-bottom: .8em; border-bottom: 1px solid #303b44; font-size: clamp(16px, 1.7vw, 32px); }
   header strong, .kicker, .time { color: #b7f36b; }
@@ -54,25 +55,25 @@
 </style>
 </head>
 <body>
-<div id="message" role="status">Monitor laden…</div>
+<div id="message" role="status">{{ t('Monitor laden…') }}</div>
 <main class="screen" id="screen" hidden>
   <header><strong>{{ event_name }}</strong><span class="muted">Jukebox</span></header>
-  <section class="now" id="now" aria-label="Huidig nummer">
+  <section class="now" id="now" aria-label="{{ t('Huidig nummer') }}">
     <div id="artwork" hidden></div>
     <div class="kicker" id="player-label"></div>
     <h1 id="title"></h1>
     <div id="timing" hidden>
       <div class="time" id="remaining"></div>
-      <div class="muted">resterend</div>
-      <progress id="progress" aria-label="Voortgang van het huidige nummer"></progress>
+      <div class="muted">{{ t('resterend') }}</div>
+      <progress id="progress" aria-label="{{ t('Voortgang van het huidige nummer') }}"></progress>
     </div>
   </section>
   <section class="up-next">
     <div class="list-head"><h2 id="list-title"></h2><span id="count" class="muted"></span></div>
     <ol id="tracks"></ol>
-    <p id="empty" class="empty muted" hidden>Er staan nog geen nummers klaar.</p>
+    <p id="empty" class="empty muted" hidden>{{ t('Er staan nog geen nummers klaar.') }}</p>
   </section>
-</main>
+{% include 'footer.html' %}</main>
 <script>
 const endpoint = {{ url_for('state', slug=slug, monitor=True)|tojson }};
 const byId = id => document.getElementById(id);
@@ -125,10 +126,10 @@ function cell(className, text, label) {
 function render() {
   if (!state || state.offline) return;
   showArtwork(state.online ? state.artwork : null);
-  byId('player-label').textContent = !state.online ? 'Liveshow' :
-    !state.connected ? 'Speler niet bereikbaar' : state.playing ? 'Nu aan het spelen' : 'Playerstatus';
-  byId('title').textContent = !state.online ? 'Liveshow actief' :
-    !state.connected ? 'Even geen muziekstatus' : state.title || 'Wachten op het volgende nummer';
+  byId('player-label').textContent = !state.online ? {{ t('Liveshow')|tojson }} :
+    !state.connected ? {{ t('Speler niet bereikbaar')|tojson }} : state.playing ? {{ t('Nu aan het spelen')|tojson }} : {{ t('Playerstatus')|tojson }};
+  byId('title').textContent = !state.online ? {{ t('Liveshow actief')|tojson }} :
+    !state.connected ? {{ t('Even geen muziekstatus')|tojson }} : state.title || {{ t('Wachten op het volgende nummer')|tojson }};
   const timed = state.online && state.title && state.duration > 0;
   byId('timing').hidden = !timed;
   if (timed) {
@@ -148,15 +149,15 @@ function render() {
   const key = JSON.stringify([hasQueue, list.length, start, shown]);
   if (key === lastList) return;
   lastList = key;
-  byId('list-title').textContent = hasQueue ? 'De wachtrij' : 'Hierna uit de fallback';
-  const count = hasQueue ? list.length + (list.length === 1 ? ' aanvraag' : ' aanvragen') : 'Geen aanvragen';
+  byId('list-title').textContent = hasQueue ? {{ t('De wachtrij')|tojson }} : {{ t('Hierna uit de fallback')|tojson }};
+  const count = hasQueue ? list.length + (list.length === 1 ? {{ t(' aanvraag')|tojson }} : {{ t(' aanvragen')|tojson }}) : {{ t('Geen aanvragen')|tojson }};
   byId('count').textContent = pages > 1 ? count + ' · ' + (page + 1) + '/' + pages : count;
   byId('empty').hidden = list.length > 0;
   byId('tracks').replaceChildren(...shown.map((track, index) => {
     const row = document.createElement('li');
     row.append(cell('rank', start + index + 1), cell('song', track.title),
-      cell('duration', formatTime(track.duration), 'speelduur'));
-    if (hasQueue) row.append(cell('score', track.votes, track.votes === 1 ? 'stem' : 'stemmen'));
+      cell('duration', formatTime(track.duration), {{ t('speelduur')|tojson }}));
+    if (hasQueue) row.append(cell('score', track.votes, track.votes === 1 ? {{ t('stem')|tojson }} : {{ t('stemmen')|tojson }}));
     return row;
   }));
 }
@@ -166,7 +167,7 @@ async function poll() {
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const response = await fetch(endpoint, {cache: 'no-store', signal: controller.signal});
-    if (!response.ok) throw new Error('Monitorstatus niet beschikbaar');
+    if (!response.ok) throw new Error({{ t('Monitorstatus niet beschikbaar')|tojson }});
     state = await response.json();
     received = performance.now();
     byId('screen').hidden = Boolean(state.offline);
@@ -177,7 +178,7 @@ async function poll() {
     state = null;
     byId('screen').hidden = true;
     byId('message').hidden = false;
-    byId('message').textContent = 'Verbinding met de jukebox onderbroken';
+    byId('message').textContent = {{ t('Verbinding met de jukebox onderbroken')|tojson }};
   } finally {
     clearTimeout(timeout);
     setTimeout(poll, 3000);

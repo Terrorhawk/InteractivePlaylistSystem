@@ -14,6 +14,7 @@ import time
 import uuid
 from urllib.parse import urlsplit
 
+from i18n import translate
 from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, session
 from werkzeug.local import LocalProxy
 from protocol.ips_remote import Bridge, Conflict, VIDEO, same_secret
@@ -271,10 +272,17 @@ def install_runtime(app, connect, execute, query, allowed, page):
     install_v6(api, bridge, run)
     app.register_blueprint(api)
 
+    def offline_message():
+        default = 'Jukebox offline op dit moment'
+        saved = bridge.ns['settings'].get('offline_text')
+        if saved and saved != default:
+            return saved
+        return translate(default, app.jinja_env.globals['ips_language'])
+
     def music(slug):
         is_admin = allowed(event=g.event)
         return render_template('music.html', site_admin=allowed(site=g.event['site_id']), event_name=g.event['name'], event=g.event, admin=is_admin, settings=bridge.ns['settings'],
-                               csrf=session['csrf'], offline=bridge.ns['visitor_offline'], results=[], message=session.pop('jukebox_error',None))
+                               csrf=session['csrf'], offline=bridge.ns['visitor_offline'], offline_message=offline_message(), results=[], message=session.pop('jukebox_error',None))
     app.add_url_rule('/<slug>/music', 'music', music)
     app.add_url_rule('/<slug>/ips-pair', 'pair_landing', lambda slug: page('Player koppelen', message='Scan deze URL met de IPS-app. De eenmalige code staat in de URL-fragment.'))
 
@@ -287,7 +295,7 @@ def install_runtime(app, connect, execute, query, allowed, page):
     def state(slug, monitor=False):
         admin = not monitor and allowed(event=g.event)
         if bridge.ns['visitor_offline'] and not admin:
-            return jsonify(offline=True,offlineText=bridge.ns['settings'].get('offline_text') or 'Jukebox offline op dit moment')
+            return jsonify(offline=True,offlineText=offline_message())
         snapshot = bridge.snapshot()
         player = dict(snapshot['status'] or {})
         if not admin:
@@ -331,7 +339,7 @@ def install_runtime(app, connect, execute, query, allowed, page):
             def request(self, *args, **kwargs):
                 kwargs.setdefault('timeout', 12)
                 return super().request(*args, **kwargs)
-        return YTMusic(requests_session=TimedSession(), language='nl')
+        return YTMusic(requests_session=TimedSession(), language=app.jinja_env.globals['ips_language'])
 
     @app.get('/<slug>/search')
     def search(slug):
@@ -360,11 +368,11 @@ def install_runtime(app, connect, execute, query, allowed, page):
                                     blocked_until=blocked*1000, cooldown=max(0, math.ceil((blocked-bridge.clock())/60))))
             bridge.ns['catalogue'] = {k:v for k,v in bridge.ns['catalogue'].items() if v['at'] > bridge.clock()-86400}
             if 'query' in request.args:
-                return render_template('music.html',event_name=g.event['name'],event=g.event,admin=allowed(event=g.event),settings=bridge.ns['settings'],csrf=session['csrf'],offline=bridge.ns['visitor_offline'],results=results,query=query_text)
+                return render_template('music.html',event_name=g.event['name'],event=g.event,admin=allowed(event=g.event),settings=bridge.ns['settings'],csrf=session['csrf'],offline=bridge.ns['visitor_offline'],offline_message=offline_message(),results=results,query=query_text)
             return jsonify(results=results)
         except Exception:
             app.logger.exception('Catalogus zoeken mislukt')
-            return jsonify(error='Zoeken is tijdelijk niet beschikbaar.'), 502
+            return jsonify(error=translate('Zoeken is tijdelijk niet beschikbaar.', app.jinja_env.globals["ips_language"])), 502
 
     def visitor_mutation():
         if bridge.ns['visitor_offline']:
@@ -384,7 +392,7 @@ def install_runtime(app, connect, execute, query, allowed, page):
             rule = bridge.ns['settings']
             used = sum(x['visitor'] == visitor and x['direction'] == -1 and x['at'] > now-rule['downvote_window_minutes']*60 for x in records)
             if used >= rule['downvote_limit']:
-                abort(409, f"Maximaal {rule['downvote_limit']} downvotes per {rule['downvote_window_minutes']} minuten.")
+                abort(409, translate("Maximaal {limit} downvotes per {minutes} minuten.", app.jinja_env.globals["ips_language"]).format(limit=rule["downvote_limit"], minutes=rule["downvote_window_minutes"]))
         records.append(dict(visitor=visitor, track=item['key'], direction=direction, at=now, active=True))
         item['votes'] += direction
         if item['votes'] <= 0:
@@ -401,7 +409,7 @@ def install_runtime(app, connect, execute, query, allowed, page):
         else:
             now, visitor, rule = bridge.clock(), session['visitor'], bridge.ns['settings']
             if sum(x['visitor'] == visitor and x['at'] > now-rule['request_window_minutes']*60 for x in bridge.ns['requests']) >= rule['request_limit']:
-                abort(409, f"Maximaal {rule['request_limit']} aanvragen per {rule['request_window_minutes']} minuten.")
+                abort(409, translate("Maximaal {limit} aanvragen per {minutes} minuten.", app.jinja_env.globals["ips_language"]).format(limit=rule["request_limit"], minutes=rule["request_window_minutes"]))
             record = bridge.ns['catalogue'].get(video)
             if not record or bridge.blocked_until(video) > now:
                 abort(409, 'Zoek dit nummer eerst of wacht tot de herhaalblokkade voorbij is.')
@@ -557,7 +565,7 @@ def install_runtime(app, connect, execute, query, allowed, page):
                 fetched = catalogue().get_playlist(code, limit=500)
             except Exception:
                 app.logger.exception('Ophalen van hoesgegevens mislukt')
-                return jsonify(error='Hoesgegevens ophalen lukt nu niet.'), 502
+                return jsonify(error=translate('Hoesgegevens ophalen lukt nu niet.', app.jinja_env.globals["ips_language"])), 502
             artwork = {track.get('videoId'): track_artwork(track) for track in fetched.get('tracks', [])}
             for track in playlist['tracks']:
                 if artwork.get(track['id']):
@@ -590,7 +598,7 @@ def install_runtime(app, connect, execute, query, allowed, page):
                                            duration=duration, artwork=track_artwork(x)))
                 bridge.ns['playlists'] = [x for x in bridge.ns['playlists'] if x['id'] != code] + [dict(id=code, name=playlist.get('title', code), tracks=tracks)]
             except (ValueError, TypeError):
-                return jsonify(error='Playlist bevat ongeldige metadata.'), 502
+                return jsonify(error=translate('Playlist bevat ongeldige metadata.', app.jinja_env.globals["ips_language"])), 502
         sync_fallback(bridge,shuffle=True)
         if (bridge.get('next_pick') or {}).get('origin') == 'fallback' and not any(t['id']==bridge.get('next_pick')['id'] for t in bridge.ns['fallback_tracks']):
             bridge.put('next_pick', None)

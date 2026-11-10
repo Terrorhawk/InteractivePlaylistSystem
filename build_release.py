@@ -4,9 +4,9 @@ from pathlib import Path
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.2.9-alpha2'
+from release_info import VERSION
 FILES = [
-    'app.py', 'management.py', 'runtime.py', 'wsgi.py', 'requirements.txt',
+    'i18n.py', 'release_info.py', 'templates/footer.html', 'app.py', 'management.py', 'runtime.py', 'wsgi.py', 'requirements.txt',
     'Dockerfile', '.dockerignore', '.gitignore', '.env.example', '.env.external-db.example',
     'compose.yaml', 'compose.external-db.yaml', 'portainer-stack.yaml', 'portainer-external-db.yaml',
     'templates/login.html', 'templates/page.html', 'templates/music.html', 'templates/monitor.html', 'protocol/ips_remote.py', 'protocol/player_v6.py',

@@ -1,0 +1,11 @@
+<footer class="ips-footer" style="padding:20px 24px;text-align:center;color:#a8b5bf;font:14px system-ui">
+  <span>Interactive Playlist System <strong style="color:#f5f7f8">Version {{ ips_version }}</strong></span>
+  <a id="ips-update" href="{{ ips_releases }}" hidden style="margin-left:12px;color:#b7f36b">{{ t('Update beschikbaar') }}</a>
+</footer>
+<script>
+fetch({{ url_for('release_update')|tojson }}, {cache: 'no-store'})
+  .then(response => response.ok ? response.json() : null)
+  .then(update => {
+    if (update && update.version) document.getElementById('ips-update').hidden = false;
+  }).catch(() => {});
+</script>

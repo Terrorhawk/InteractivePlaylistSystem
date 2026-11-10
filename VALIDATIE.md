@@ -22,3 +22,5 @@ Update 0.2.2: geen publieke eventlijst; muziektemplate en primaire stylesheet ov
 0.2.5: aangepaste offlinetekst, HTML-escaping en terugvallen op standaardtekst getest.
 
 0.2.6: tests voor behouden shuffle over requests en nieuwe appinstantie, shuffle-autorisatie en behoud van vastgezette/verstuurde opvolger met correcte cursor na bevestiging.
+
+0.2.10: Nederlandse en Engelse paginaweergave, versiefooter, vergelijking van prereleases en caching lokaal getest.

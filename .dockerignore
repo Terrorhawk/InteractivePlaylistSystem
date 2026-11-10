@@ -11,3 +11,6 @@
 !protocol/**
 
 **/__pycache__/
+
+!i18n.py
+!release_info.py

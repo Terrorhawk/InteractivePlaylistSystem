@@ -71,6 +71,30 @@ class RuntimeTests(unittest.TestCase):
         self.post(self.client, '/party/control', action='offline')
         self.assertTrue(self.client.get('/party/monitor/state').json['offline'])
 
+    def test_english_ui_and_release_footer(self):
+        from app import create_app
+        english = create_app({**self.config, 'LANGUAGE': 'en'}).test_client()
+        music = english.get('/party/').get_data(as_text=True)
+        self.assertIn('lang="en"', music)
+        self.assertIn('What would you like to hear?', music)
+        self.assertIn('Interactive Playlist System', music)
+        self.assertIn('Update available', music)
+        self.assertIn('Loading monitor', english.get('/party/monitor').get_data(as_text=True))
+        self.post(self.client, '/party/control', action='offline')
+        self.assertEqual(english.get('/party/monitor/state').json['offlineText'],
+                         'Jukebox is currently offline')
+
+    def test_release_check_compares_prereleases_and_caches_result(self):
+        from io import BytesIO
+        from unittest.mock import patch
+        releases = [{'tag_name': 'v0.2.9-alpha2'}, {'tag_name': 'v0.2.11-alpha1', 'prerelease': True},
+                    {'tag_name': 'v0.2.12', 'draft': True}]
+        with patch('release_info._next_check', 0), patch('release_info._available', None), \
+                patch('release_info.urlopen', return_value=BytesIO(json.dumps(releases).encode())) as fetch:
+            for _ in range(2):
+                self.assertEqual(self.client.get('/release-update').json['version'], 'v0.2.11-alpha1')
+            fetch.assert_called_once()
+
     def test_confirmation_not_ack_consumes_request(self):
         self.add()
         self.sync(video='',state='unknown')

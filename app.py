@@ -9,7 +9,9 @@ from urllib.parse import urlsplit
 
 import pymysql
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, session
+from i18n import translate
 from management import mutate
+from release_info import RELEASES_URL, VERSION, available_update
 from werkzeug.security import check_password_hash, generate_password_hash
 
 RULES = {
@@ -25,7 +27,7 @@ RULES = {
     'fallback_max_minutes': ('Maximale fallbacktrackduur (minuten)', 34, 1, 240),
     'fallback_preview_count': ('Aantal fallbacknummers in vooruitblik', 3, 1, 10),
 }
-RESERVED = {'api', 'login', 'logout', 'admin', 'health', 'static', 'ips-pair', 'site'}
+RESERVED = {'api', 'login', 'logout', 'admin', 'health', 'static', 'ips-pair', 'site', 'release-update'}
 SCHEMA = [
     'CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)',
     'CREATE TABLE IF NOT EXISTS users (id VARCHAR(36) PRIMARY KEY, username VARCHAR(80) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, global_admin INTEGER NOT NULL DEFAULT 0)',
@@ -44,11 +46,17 @@ def create_app(config=None):
                       ADMIN_URL=os.environ.get('IPS_ADMIN_URL'),
                       ADMIN_USERNAME=os.environ.get('IPS_ADMIN_USERNAME'),
                       ADMIN_PASSWORD=os.environ.get('IPS_ADMIN_PASSWORD'),
+                      LANGUAGE=os.environ.get('IPS_LANGUAGE', 'nl'),
                       SQLITE_TEST_PATH=None, MAX_CONTENT_LENGTH=32768,
                       SESSION_COOKIE_NAME='ips_multisite_alpha',
                       SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax')
     if config:
         app.config.update(config)
+    language = app.config['LANGUAGE'].strip().lower()
+    if language not in ('nl', 'en'):
+        raise ValueError('IPS_LANGUAGE must be nl or en')
+    app.jinja_env.globals.update(t=lambda text: translate(text, language), ips_language=language,
+                                 ips_version=VERSION, ips_releases=RELEASES_URL)
     if not app.config['SECRET_KEY'] or len(app.config['SECRET_KEY']) < 32:
         raise ValueError('IPS_SECRET_KEY vereist (minimaal 32 tekens)')
     admin = urlsplit(app.config['ADMIN_URL'] or '')
@@ -110,8 +118,8 @@ def create_app(config=None):
             abort(403)
     def page(title, **data):
         if data.get('login'):
-            return render_template('login.html',event_name=g.site['name'] if getattr(g,'site',None) else 'IPS',back_url='/',csrf=session['csrf'],error=data.get('message'))
-        return render_template('page.html', title=title, rules=RULES, admin_path=admin_path,
+            return render_template('login.html',event_name=g.site['name'] if getattr(g,'site',None) else 'IPS',back_url='/',csrf=session['csrf'],error=translate(data.get('message'),language))
+        return render_template('page.html', title=title if data.get('event') else translate(title,language), rules=RULES, admin_path=admin_path,
                                csrf=session['csrf'], **data)
     @app.before_request
     def context():
@@ -152,12 +160,16 @@ def create_app(config=None):
             session['jukebox_error']=exc.description
             return redirect('/'+g.event['slug']+'/')
         if request.accept_mimetypes.best == 'application/json':
-            return jsonify(error=exc.description), exc.code
+            return jsonify(error=translate(exc.description,language)), exc.code
         return page('Actie niet uitgevoerd', message=exc.description), exc.code
     @app.get('/health')
     def health():
         query('SELECT 1')
-        return {'status': 'ok', 'version': '0.2.9-alpha2', 'playerSupported': True}
+        return {'status': 'ok', 'version': VERSION, 'playerSupported': True}
+
+    @app.get('/release-update')
+    def release_update():
+        return jsonify(version=available_update())
     def login():
         if request.method == 'POST':
             user = query('SELECT * FROM users WHERE username=?', (request.form.get('username', ''),), one=True)
@@ -247,7 +259,7 @@ def create_app(config=None):
             g.db.commit()
             return redirect('/site/settings')
         selected=query('SELECT event_id FROM site_defaults WHERE site_id=?',(g.site['id'],),one=True)
-        return page('Sitebeheer · '+g.site['name'],site_settings=True,
+        return page(translate('Sitebeheer',language)+' · '+g.site['name'],site_settings=True,
                     site_events=query('SELECT id,name FROM events WHERE site_id=? ORDER BY name',(g.site['id'],)),
                     default_event=selected['event_id'] if selected else '')
 
@@ -303,7 +315,7 @@ def create_app(config=None):
                     abort(409, 'Instellingen zijn ondertussen gewijzigd. Herlaad de pagina.')
             g.db.commit()
             return redirect(request.path)
-        return page(event['name'] if event else 'Nieuw event: '+slug, event_form=True, event=event,
+        return page(event['name'] if event else translate('Nieuw event',language)+': '+slug, event_form=True, event=event,
                     settings=json.loads(event['settings']) if event else {k:v[1] for k,v in RULES.items()})
     @app.get('/<slug>/')
     def public(slug):

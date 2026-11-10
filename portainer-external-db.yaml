@@ -1,10 +1,11 @@
 services:
   web:
-    image: ips-multisite:0.2.9-alpha2
+    image: ips-multisite:0.2.10-alpha2
     restart: unless-stopped
     ports:
       - "${IPS_HTTP_PORT:-8044}:8000"
     environment:
+      IPS_LANGUAGE: ${IPS_LANGUAGE:-nl}
       IPS_ADMIN_URL: ${IPS_ADMIN_URL:?Set IPS_ADMIN_URL}
       IPS_ADMIN_USERNAME: ${IPS_ADMIN_USERNAME:?Set IPS_ADMIN_USERNAME}
       IPS_ADMIN_PASSWORD: ${IPS_ADMIN_PASSWORD:?Set IPS_ADMIN_PASSWORD}
