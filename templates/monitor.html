@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ event_name }} · Monitor</title>
+<style>
+  :root { color-scheme: dark; font: 16px/1.4 system-ui, sans-serif; color: #f5f7f8; background: #101418; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; }
+  .screen { min-height: 100vh; padding: clamp(16px, 3vw, 64px); display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.15fr); grid-template-rows: auto 1fr;
+    gap: clamp(16px, 2.6vw, 48px); }
+  header { grid-column: 1/-1; display: flex; justify-content: space-between; gap: 1rem;
+    padding-bottom: .8em; border-bottom: 1px solid #303b44; font-size: clamp(16px, 1.7vw, 32px); }
+  header strong, .kicker, .time { color: #b7f36b; }
+  .muted, .rank { color: #a8b5bf; }
+  .now { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column;
+    justify-content: center; padding: clamp(20px, 3vw, 58px); border: 1px solid #303b44;
+    border-radius: 20px; background: linear-gradient(115deg, #25352a, #1a2127 75%); }
+  .now::before { content: ""; position: absolute; inset: -25%; z-index: -1;
+    background: radial-gradient(ellipse at 35% 38%, #557c4066, transparent 57%),
+      repeating-radial-gradient(circle at 66% 46%, transparent 0 14px, #b7f36b11 15px 16px, transparent 17px 25px);
+    animation: glow 12s ease-in-out infinite alternate; }
+  @keyframes glow { from { transform: translate(-5%, 4%); opacity: .45; }
+    to { transform: translate(7%, -5%); opacity: .9; } }
+  @media (prefers-reduced-motion: reduce) { .now::before { animation: none; } }
+  #artwork { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+  #artwork img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #artwork::after { content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, #101418e6, #10141880); }
+  .now.has-artwork::before { display: none; }
+  .kicker { text-transform: uppercase; letter-spacing: .12em; font-weight: 700; font-size: clamp(12px, 1.15vw, 23px); }
+  h1 { font-size: clamp(30px, 4.5vw, 90px); line-height: 1.07; letter-spacing: -.035em;
+    margin: .2em 0 .6em; overflow-wrap: anywhere; }
+  .time { font-size: clamp(46px, 7vw, 140px); line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
+  progress { width: 100%; height: 9px; accent-color: #b7f36b; margin-top: 1.3rem; }
+  .up-next { display: flex; flex-direction: column; min-width: 0; }
+  .list-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
+  h2 { font-size: clamp(22px, 2.6vw, 54px); margin: 0; }
+  ol { flex: 1; list-style: none; display: grid; grid-auto-rows: 1fr; padding: 0; margin: .6rem 0 0; }
+  li { display: grid; grid-template-columns: 2ch minmax(0, 1fr) auto auto; align-items: center;
+    gap: clamp(8px, 1.3vw, 28px); padding: .65rem 0; border-bottom: 1px solid #303b44; }
+  li:last-child { border: 0; }
+  .song { overflow-wrap: anywhere; font-size: clamp(16px, 2vw, 42px);
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .duration, .score { text-align: right; font-variant-numeric: tabular-nums; font-size: clamp(16px, 2vw, 40px); font-weight: 700; }
+  .unit { display: block; color: #a8b5bf; font-size: clamp(11px, 1vw, 20px); font-weight: 400; }
+  .empty { margin-top: 1rem; }
+  #message { min-height: 100vh; display: grid; place-items: center; text-align: center;
+    padding: 24px; background: #000; font-size: clamp(20px, 3vw, 48px); }
+  @media (max-width: 650px) { .screen { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; } }
+</style>
+</head>
+<body>
+<div id="message" role="status">Monitor laden…</div>
+<main class="screen" id="screen" hidden>
+  <header><strong>{{ event_name }}</strong><span class="muted">Jukebox</span></header>
+  <section class="now" id="now" aria-label="Huidig nummer">
+    <div id="artwork" hidden></div>
+    <div class="kicker" id="player-label"></div>
+    <h1 id="title"></h1>
+    <div id="timing" hidden>
+      <div class="time" id="remaining"></div>
+      <div class="muted">resterend</div>
+      <progress id="progress" aria-label="Voortgang van het huidige nummer"></progress>
+    </div>
+  </section>
+  <section class="up-next">
+    <div class="list-head"><h2 id="list-title"></h2><span id="count" class="muted"></span></div>
+    <ol id="tracks"></ol>
+    <p id="empty" class="empty muted" hidden>Er staan nog geen nummers klaar.</p>
+  </section>
+</main>
+<script>
+const endpoint = {{ url_for('state', slug=slug, monitor=True)|tojson }};
+const byId = id => document.getElementById(id);
+let state = null;
+let received = 0;
+let lastList = '';
+let artworkUrl = null;
+
+function showArtwork(url) {
+  if (url === artworkUrl) return;
+  artworkUrl = url;
+  const container = byId('artwork');
+  container.hidden = true;
+  container.replaceChildren();
+  byId('now').classList.remove('has-artwork');
+  if (!url) return;
+
+  const image = document.createElement('img');
+  image.alt = '';
+  image.referrerPolicy = 'no-referrer';
+  image.addEventListener('load', () => {
+    if (!container.contains(image)) return;
+    container.hidden = false;
+    byId('now').classList.add('has-artwork');
+  }, {once: true});
+  image.addEventListener('error', () => image.remove(), {once: true});
+  container.append(image);
+  image.src = url;
+}
+
+function formatTime(value) {
+  if (!Number.isFinite(value) || value < 0) return '—';
+  const seconds = Math.floor(value);
+  return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+}
+
+function cell(className, text, label) {
+  const node = document.createElement('span');
+  node.className = className;
+  node.textContent = text;
+  if (label) {
+    const unit = document.createElement('span');
+    unit.className = 'unit';
+    unit.textContent = label;
+    node.append(unit);
+  }
+  return node;
+}
+
+function render() {
+  if (!state || state.offline) return;
+  showArtwork(state.online ? state.artwork : null);
+  byId('player-label').textContent = !state.online ? 'Liveshow' :
+    !state.connected ? 'Speler niet bereikbaar' : state.playing ? 'Nu aan het spelen' : 'Playerstatus';
+  byId('title').textContent = !state.online ? 'Liveshow actief' :
+    !state.connected ? 'Even geen muziekstatus' : state.title || 'Wachten op het volgende nummer';
+  const timed = state.online && state.title && state.duration > 0;
+  byId('timing').hidden = !timed;
+  if (timed) {
+    const elapsed = state.playing ? (performance.now() - received) / 1000 : 0;
+    const position = Math.min(state.duration, Math.max(0, state.position + elapsed));
+    byId('remaining').textContent = formatTime(Math.ceil(state.duration - position));
+    byId('progress').max = state.duration;
+    byId('progress').value = position;
+  }
+
+  const hasQueue = state.queue.length > 0;
+  const list = hasQueue ? state.queue : state.fallback;
+  const pages = Math.max(1, Math.ceil(list.length / 4));
+  const page = Math.floor(performance.now() / 12000) % pages;
+  const start = page * 4;
+  const shown = list.slice(start, start + 4);
+  const key = JSON.stringify([hasQueue, list.length, start, shown]);
+  if (key === lastList) return;
+  lastList = key;
+  byId('list-title').textContent = hasQueue ? 'De wachtrij' : 'Hierna uit de fallback';
+  const count = hasQueue ? list.length + (list.length === 1 ? ' aanvraag' : ' aanvragen') : 'Geen aanvragen';
+  byId('count').textContent = pages > 1 ? count + ' · ' + (page + 1) + '/' + pages : count;
+  byId('empty').hidden = list.length > 0;
+  byId('tracks').replaceChildren(...shown.map((track, index) => {
+    const row = document.createElement('li');
+    row.append(cell('rank', start + index + 1), cell('song', track.title),
+      cell('duration', formatTime(track.duration), 'speelduur'));
+    if (hasQueue) row.append(cell('score', track.votes, track.votes === 1 ? 'stem' : 'stemmen'));
+    return row;
+  }));
+}
+
+async function poll() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(endpoint, {cache: 'no-store', signal: controller.signal});
+    if (!response.ok) throw new Error('Monitorstatus niet beschikbaar');
+    state = await response.json();
+    received = performance.now();
+    byId('screen').hidden = Boolean(state.offline);
+    byId('message').hidden = !state.offline;
+    if (state.offline) byId('message').textContent = state.offlineText;
+    render();
+  } catch (error) {
+    state = null;
+    byId('screen').hidden = true;
+    byId('message').hidden = false;
+    byId('message').textContent = 'Verbinding met de jukebox onderbroken';
+  } finally {
+    clearTimeout(timeout);
+    setTimeout(poll, 3000);
+  }
+}
+
+setInterval(render, 500);
+poll();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+*
+!requirements.txt
+!app.py
+!wsgi.py
+!templates/
+!templates/**
+
+!management.py
+!runtime.py
+!protocol/
+!protocol/**
+
+**/__pycache__/
